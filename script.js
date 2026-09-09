@@ -12,9 +12,11 @@ class SnapTube {
         this.qualityList = document.getElementById('qualityList');
         this.formatTabs = document.getElementById('formatTabs');
         this.downloadBtn = document.getElementById('downloadBtn');
+        this.retryBtn = document.getElementById('retryBtn');
         this.downloadHistory = document.getElementById('downloadHistory');
         this.clearHistoryBtn = document.getElementById('clearHistory');
         this.qualityHint = document.getElementById('qualityHint');
+        this.errorBox = document.getElementById('errorBox');
 
         this.currentInfo = null;
         this.selectedFormat = 'mp4';
@@ -36,6 +38,7 @@ class SnapTube {
         });
 
         this.verifyBtn.addEventListener('click', () => this.verifyUrl());
+        document.getElementById('retryBtn')?.addEventListener('click', () => this.verifyUrl());
 
         this.formatTabs.addEventListener('click', (e) => {
             const tab = e.target.closest('.format-tab');
@@ -76,6 +79,8 @@ class SnapTube {
         }
 
         this.preview.style.display = 'none';
+        this.downloadBtn.style.display = 'none';
+        this.retryBtn.style.display = 'none';
         this.showToast('جاري التحقق من الرابط...', 'info');
 
         try {
@@ -99,6 +104,10 @@ class SnapTube {
             }
 
             this.preview.style.display = 'block';
+            this.downloadBtn.style.display = 'inline-flex';
+            this.retryBtn.style.display = 'none';
+            this.errorBox.style.display = 'none';
+
             this.selectedFormat = 'mp4';
             this.formatTabs.querySelectorAll('.format-tab').forEach(t => t.classList.remove('active'));
             this.formatTabs.querySelector('[data-format="mp4"]')?.classList.add('active');
@@ -107,6 +116,8 @@ class SnapTube {
         } catch (err) {
             console.error(err);
             this.preview.style.display = 'none';
+            this.downloadBtn.style.display = 'none';
+            this.retryBtn.style.display = 'inline-flex';
             this.showToast(err.message || 'رابط غير صالح', 'error');
         }
     }
@@ -119,40 +130,41 @@ class SnapTube {
     }
 
     getAvailableQualities() {
-        if (!this.currentInfo || !this.currentInfo.formats) return [];
+        if (!this.currentInfo || !this.currentInfo.formats || !this.currentInfo.formats.length) {
+            return [];
+        }
+
         const seen = new Set();
         const items = [];
 
         for (const f of this.currentInfo.formats) {
             if (this.selectedFormat === 'mp3' || this.selectedFormat === 'm4a') {
-                if (f.hasAudio) {
-                    const label = f.quality || 'صوت عالي';
-                    const key = `audio-${label}`;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        items.push({
-                            label: label,
-                            size: this.formatBytes(f.filesize),
-                            type: 'audio',
-                            format: this.selectedFormat,
-                            itag: f.itag
-                        });
-                    }
+                if (!f.hasAudio) continue;
+                const label = f.quality || f.audioQuality || 'صوت عالي';
+                const key = `audio-${label}-${f.container || f.mimeType || 'audio'}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    items.push({
+                        label,
+                        size: this.formatBytes(f.filesize),
+                        type: 'audio',
+                        format: this.selectedFormat,
+                        itag: f.itag
+                    });
                 }
             } else {
-                if (f.hasVideo) {
-                    const label = f.quality || f.resolution || 'video';
-                    const key = label;
-                    if (!seen.has(key)) {
-                        seen.add(key);
-                        items.push({
-                            label: label,
-                            size: this.formatBytes(f.filesize),
-                            type: 'video',
-                            format: 'mp4',
-                            itag: f.itag
-                        });
-                    }
+                if (!f.hasVideo) continue;
+                const label = f.quality || f.resolution || 'video';
+                const key = `${label}-${f.container || f.mimeType || 'video'}`;
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    items.push({
+                        label,
+                        size: this.formatBytes(f.filesize),
+                        type: 'video',
+                        format: 'mp4',
+                        itag: f.itag
+                    });
                 }
             }
         }
@@ -175,10 +187,17 @@ class SnapTube {
 
     renderQualities() {
         const qualities = this.getAvailableQualities();
+        this.qualityHint.textContent = qualities.length ? `${qualities.length} جودة متاحة` : '---';
+
         if (!qualities.length) {
-            this.qualityList.innerHTML = '<div class="quality-item"><div class="quality-left"><div class="quality-name">لا توجد جودات متاحة</div></div></div>';
+            this.qualityList.innerHTML = `
+                <div class="quality-item">
+                    <div class="quality-left">
+                        <div class="quality-name">لا توجد جودات متاحة</div>
+                        <div class="quality-size">حاول مرة أخرى أو استخدم رابط آخر</div>
+                    </div>
+                </div>`;
             this.selectedQuality = null;
-            this.qualityHint.textContent = '---';
             return;
         }
 
@@ -202,9 +221,6 @@ class SnapTube {
             });
             this.qualityList.appendChild(el);
         });
-
-        const best = qualities[0];
-        this.qualityHint.textContent = best ? `الأفضل: ${best.label}` : '---';
     }
 
     async startDownload() {

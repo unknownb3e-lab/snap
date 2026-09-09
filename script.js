@@ -117,7 +117,11 @@ class SnapTube {
             console.error(err);
             this.preview.style.display = 'none';
             this.downloadBtn.style.display = 'none';
-            this.retryBtn.style.display = 'inline-flex';
+            if (this.retryBtn) this.retryBtn.style.display = 'inline-flex';
+            if (this.errorBox) {
+                this.errorBox.style.display = 'block';
+                this.errorBox.textContent = err.message || 'رابط غير صالح';
+            }
             this.showToast(err.message || 'رابط غير صالح', 'error');
         }
     }
@@ -130,14 +134,14 @@ class SnapTube {
     }
 
     getAvailableQualities() {
-        if (!this.currentInfo || !this.currentInfo.formats || !this.currentInfo.formats.length) {
-            return [];
-        }
+        if (!this.currentInfo) return [];
+        const formats = this.currentInfo.formats || [];
+        if (!formats.length) return [];
 
         const seen = new Set();
         const items = [];
 
-        for (const f of this.currentInfo.formats) {
+        for (const f of formats) {
             if (this.selectedFormat === 'mp3' || this.selectedFormat === 'm4a') {
                 if (!f.hasAudio) continue;
                 const label = f.quality || f.audioQuality || 'صوت عالي';
@@ -154,7 +158,7 @@ class SnapTube {
                 }
             } else {
                 if (!f.hasVideo) continue;
-                const label = f.quality || f.resolution || 'video';
+                const label = f.quality || f.resolution || 'جودة غير معروفة';
                 const key = `${label}-${f.container || f.mimeType || 'video'}`;
                 if (!seen.has(key)) {
                     seen.add(key);

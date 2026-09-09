@@ -4,7 +4,7 @@ const API_BASE = isRailway ? '/api' : 'http://localhost:3000/api';
 class SnapTube {
     constructor() {
         this.urlInput = document.getElementById('urlInput');
-        this.pasteBtn = document.getElementById('pasteBtn');
+        this.verifyBtn = document.getElementById('verifyBtn');
         this.preview = document.getElementById('preview');
         this.previewTitle = document.getElementById('previewTitle');
         this.previewMeta = document.getElementById('previewMeta');
@@ -30,13 +30,12 @@ class SnapTube {
     }
 
     bindEvents() {
-        this.pasteBtn.addEventListener('click', () => this.pasteFromClipboard());
         this.urlInput.addEventListener('paste', () => setTimeout(() => this.urlInput.focus(), 100));
         this.urlInput.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') this.verifyUrl();
         });
 
-        document.getElementById('verifyBtn')?.addEventListener('click', () => this.verifyUrl());
+        this.verifyBtn.addEventListener('click', () => this.verifyUrl());
 
         this.formatTabs.addEventListener('click', (e) => {
             const tab = e.target.closest('.format-tab');
@@ -58,7 +57,7 @@ class SnapTube {
         try {
             const text = await navigator.clipboard.readText();
             this.urlInput.value = text;
-            this.handleInput();
+            this.verifyUrl();
             this.urlInput.focus();
         } catch (err) {
             this.showToast('لم يتمكن من الوصول للحافظة', 'error');

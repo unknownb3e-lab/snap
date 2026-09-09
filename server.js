@@ -1,0 +1,179 @@
+const express = require('express');
+const cors = require('cors');
+const YtDlpWrap = require('yt-dlp-wrap');
+const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.static(path.join(__dirname)));
+app.use('/downloads', express.static(path.join(__dirname, 'downloads')));
+
+const DOWNLOADS_DIR = path.join(__dirname, 'downloads');
+if (!fs.existsSync(DOWNLOADS_DIR)) {
+    fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
+}
+
+const ytDlp = new YtDlpWrap(process.env.YTDLP_PATH || 'yt-dlp');
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
+});
+
+app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', message: 'SnapTube API is running' });
+});
+
+app.post('/api/video-info', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        const info = await ytDlp.getInfo(url);
+        const formats = (info.formats || [])
+            .filter(f => (f.hasVideo || f.hasAudio) && !f.manifest_url)
+            .map(f => ({
+                itag: f.format_id,
+                quality: f.quality_label || f.audio_quality || 'unknown',
+                resolution: f.resolution || 'audio only',
+                container: f.ext,
+                hasVideo: !!f.has_video,
+                hasAudio: !!f.has_audio,
+                filesize: f.filesize || f.filesize_approx || null,
+                mimeType: f.mime_type || `video/${f.ext || 'mp4'}`,
+                vbr: f.vbr,
+                abr: f.abr
+            }));
+
+        const thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails[0]?.url) || '';
+
+        res.json({
+            title: info.title || 'فيديو غير معروف',
+            author: info.uploader || info.channel || 'غير معروف',
+            thumbnail,
+            duration: info.duration || 0,
+            views: info.view_count || 0,
+            formats
+        });
+    } catch (error) {
+        console.error('Error fetching video info:', error.message);
+        res.status(500).json({ error: `Failed to fetch video info: ${error.message}` });
+    }
+});
+
+app.post('/api/download', async (req, res) => {
+    try {
+        const { url, format, type, itag } = req.body;
+        if (!url) {
+            return res.status(400).json({ error: 'URL is required' });
+        }
+
+        const filename = `${uuidv4()}`;
+        let outputPath;
+        let formatOption = '';
+
+        if (type === 'audio') {
+            formatOption = `bestaudio/best`;
+            outputPath = path.join(DOWNLOADS_DIR, `${filename}.${format === 'm4a' ? 'm4a' : 'mp3'}`);
+        } else {
+            formatOption = itag ? itag : 'bestvideo+bestaudio/best';
+            outputPath = path.join(DOWNLOADS_DIR, `${filename}.${format === 'webm' ? 'webm' : 'mp4'}`);
+        }
+
+        const args = [
+            url,
+            '-f', formatOption,
+            '-o', outputPath,
+            '--no-playlist',
+            '--no-warnings',
+            '--quiet'
+        ];
+
+        if (type === 'audio') {
+            args.push('-x');
+            args.push('--audio-format');
+            args.push(format === 'm4a' ? 'm4a' : 'mp3');
+            args.push('--audio-quality');
+            args.push('0');
+        }
+
+        if (format === 'mp4' && type !== 'audio') {
+            args.push('--merge-output-format');
+            args.push('mp4');
+        }
+
+        await ytDlp.exec(args);
+
+        const actualFile = fs.existsSync(outputPath)
+            ? outputPath
+            : await new Promise((resolve) => {
+                const check = () => {
+                    const files = fs.readdirSync(DOWNLOADS_DIR).filter(f => f.startsWith(filename));
+                    if (files.length) return path.join(DOWNLOADS_DIR, files[0]);
+                    return null;
+                };
+                const found = check();
+                if (found) return resolve(found);
+                setTimeout(() => resolve(check()), 1000);
+            });
+
+        if (!actualFile || !fs.existsSync(actualFile)) {
+            throw new Error('File not found after download');
+        }
+
+        const finalName = path.basename(actualFile);
+
+        res.json({
+            success: true,
+            message: 'Download completed',
+            filename: finalName
+        });
+    } catch (error) {
+        console.error('Download error:', error);
+        res.status(500).json({ error: `Download failed: ${error.message}` });
+    }
+});
+
+app.get('/api/download-file/:filename', (req, res) => {
+    const filename = req.params.filename;
+    const filePath = path.join(DOWNLOADS_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File not found' });
+    }
+    res.download(filePath, (err) => {
+        if (err) console.error('Download error:', err);
+    });
+});
+
+app.get('/manifest.json', (req, res) => {
+    res.json({
+        name: 'SnapTube Downloader',
+        short_name: 'SnapTube',
+        description: 'Download videos and music',
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#0a0a0f',
+        theme_color: '#ff3b3b',
+        icons: [
+            { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+            { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+        ]
+    });
+});
+
+app.get('/sw.js', (req, res) => {
+    res.sendFile(path.join(__dirname, 'sw.js'));
+});
+
+app.listen(PORT, () => {
+    console.log(`🚀 SnapTube server running on port ${PORT}`);
+    console.log(`📱 Access at: http://localhost:${PORT}`);
+});
+
+module.exports = app;

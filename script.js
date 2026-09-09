@@ -125,12 +125,13 @@ class SnapTube {
 
         for (const f of this.currentInfo.formats) {
             if (this.selectedFormat === 'mp3' || this.selectedFormat === 'm4a') {
-                if (f.hasAudio && !f.hasVideo) {
-                    const key = `audio-${f.audioQuality || 'highest'}`;
+                if (f.hasAudio) {
+                    const label = f.quality || 'صوت عالي';
+                    const key = `audio-${label}`;
                     if (!seen.has(key)) {
                         seen.add(key);
                         items.push({
-                            label: f.audioQuality || 'صوت عالي',
+                            label: label,
                             size: this.formatBytes(f.filesize),
                             type: 'audio',
                             format: this.selectedFormat,
@@ -139,15 +140,13 @@ class SnapTube {
                     }
                 }
             } else {
-                if (f.hasVideo && f.hasAudio) {
-                    const h = f.qualityLabel?.match(/(\d+)p/);
-                    if (!h) continue;
-                    const p = h[1];
-                    const key = `${p}p`;
+                if (f.hasVideo) {
+                    const label = f.quality || f.resolution || 'video';
+                    const key = label;
                     if (!seen.has(key)) {
                         seen.add(key);
                         items.push({
-                            label: `${p}p HD`,
+                            label: label,
                             size: this.formatBytes(f.filesize),
                             type: 'video',
                             format: 'mp4',

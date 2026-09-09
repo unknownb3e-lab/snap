@@ -1,5 +1,5 @@
 const isRailway = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const API_BASE = isRailway ? '/api' : 'http://localhost:3000/api';
+const API_BASE = isRailway ? '/api' : 'http://localhost:8080/api';
 
 class SnapTube {
     constructor() {

@@ -20,6 +20,10 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const YT_COOKIES = process.env.YT_COOKIES || '';
+const COOKIES_PATH = path.join(__dirname, 'cookies.txt');
+if (YT_COOKIES && !fs.existsSync(COOKIES_PATH)) {
+    fs.writeFileSync(COOKIES_PATH, YT_COOKIES, 'utf8');
+}
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
@@ -82,7 +86,7 @@ app.post('/api/video-info', async (req, res) => {
             '--no-warnings',
             '--extractor-args', 'youtube:player_client=android;player_skip=configs',
             '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            ...(YT_COOKIES ? ['--cookies', YT_COOKIES] : [])
+            ...(YT_COOKIES ? ['--cookies', COOKIES_PATH] : [])
         ]);
 
         const lines = output.split('\n').filter(Boolean);

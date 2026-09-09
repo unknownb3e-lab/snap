@@ -1,5 +1,5 @@
 const isRailway = window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
-const API_BASE = isRailway ? '' : 'http://localhost:3000/api';
+const API_BASE = isRailway ? '/api' : 'http://localhost:3000/api';
 
 class SnapTube {
     constructor() {
@@ -31,11 +31,12 @@ class SnapTube {
 
     bindEvents() {
         this.pasteBtn.addEventListener('click', () => this.pasteFromClipboard());
-        this.urlInput.addEventListener('paste', () => setTimeout(() => this.handleInput(), 100));
-        this.urlInput.addEventListener('input', () => this.handleInput());
+        this.urlInput.addEventListener('paste', () => setTimeout(() => this.urlInput.focus(), 100));
         this.urlInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') this.startDownload();
+            if (e.key === 'Enter') this.verifyUrl();
         });
+
+        document.getElementById('verifyBtn')?.addEventListener('click', () => this.verifyUrl());
 
         this.formatTabs.addEventListener('click', (e) => {
             const tab = e.target.closest('.format-tab');
@@ -68,13 +69,15 @@ class SnapTube {
         return !!url && (url.startsWith('http://') || url.startsWith('https://'));
     }
 
-    async handleInput() {
+    async verifyUrl() {
         const url = this.urlInput.value.trim();
         if (!url || !this.validateUrl(url)) {
-            this.preview.style.display = 'none';
-            this.currentInfo = null;
+            this.showToast('أدخل رابط صحيح أولاً', 'error');
             return;
         }
+
+        this.preview.style.display = 'none';
+        this.showToast('جاري التحقق من الرابط...', 'info');
 
         try {
             const res = await fetch(`${API_BASE}/video-info`, {
@@ -84,7 +87,7 @@ class SnapTube {
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error);
+            if (!res.ok) throw new Error(data.error || 'فشل التحقق');
 
             this.currentInfo = { ...data, url };
             this.previewTitle.textContent = data.title || 'فيديو';
@@ -101,9 +104,11 @@ class SnapTube {
             this.formatTabs.querySelectorAll('.format-tab').forEach(t => t.classList.remove('active'));
             this.formatTabs.querySelector('[data-format="mp4"]')?.classList.add('active');
             this.renderQualities();
+            this.showToast('تم التحقق بنجاح', 'success');
         } catch (err) {
             console.error(err);
             this.preview.style.display = 'none';
+            this.showToast(err.message || 'رابط غير صالح', 'error');
         }
     }
 

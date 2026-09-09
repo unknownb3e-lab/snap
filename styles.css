@@ -150,6 +150,17 @@ body {
     color: var(--text-primary);
 }
 
+.search-action.verify-action {
+    background: linear-gradient(135deg, var(--accent), var(--accent-2));
+    color: white;
+    border: none;
+}
+
+.search-action.verify-action:hover {
+    opacity: 0.9;
+    color: white;
+}
+
 .preview {
     background: var(--bg-surface);
     border: 1px solid var(--border);

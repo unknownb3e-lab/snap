@@ -22,7 +22,7 @@ const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
-        const child = spawn(YTDLP, args);
+        const child = spawn(YTDLP, args, { stdio: ['pipe', 'pipe', 'pipe'] });
         let stdout = '';
         let stderr = '';
 
@@ -43,7 +43,9 @@ function runYtDlp(args) {
             }
         });
 
-        child.on('error', reject);
+        child.on('error', (err) => {
+            reject(new Error(`yt-dlp not found: ${err.message}`));
+        });
     });
 }
 

@@ -19,6 +19,8 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
 }
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
+const YT_COOKIES = process.env.YT_COOKIES || '';
+const YT_COOKIES = process.env.YT_COOKIES || '';
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {
@@ -80,7 +82,8 @@ app.post('/api/video-info', async (req, res) => {
             '--no-playlist',
             '--no-warnings',
             '--extractor-args', 'youtube:player_client=android;player_skip=configs',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            ...(YT_COOKIES ? ['--cookies', YT_COOKIES] : [])
         ]);
 
         const lines = output.split('\n').filter(Boolean);
@@ -99,19 +102,23 @@ app.post('/api/video-info', async (req, res) => {
                 }
             })
             .filter(Boolean)
-            .filter(f => f.has_video || f.has_audio)
-            .map(f => ({
-                itag: f.format_id,
-                quality: f.quality_label || f.audio_quality || 'unknown',
-                resolution: f.resolution || 'audio only',
-                container: f.ext,
-                hasVideo: !!f.has_video,
-                hasAudio: !!f.has_audio,
-                filesize: f.filesize || f.filesize_approx || null,
-                mimeType: f.mime_type || `video/${f.ext || 'mp4'}`,
-                vbr: f.vbr,
-                abr: f.abr
-            }));
+            .map(f => {
+                const isVideo = f.has_video && !f.has_audio;
+                const isAudio = f.has_audio && !f.has_video;
+                const isCombined = f.has_video && f.has_audio;
+                if (!isVideo && !isAudio && !isCombined) return null;
+                return {
+                    itag: f.format_id,
+                    quality: f.quality_label || f.audio_quality || (isVideo ? 'video' : isAudio ? 'audio' : 'unknown'),
+                    resolution: f.resolution || (isVideo ? 'video' : isAudio ? 'audio only' : 'unknown'),
+                    container: f.ext,
+                    hasVideo: !!f.has_video,
+                    hasAudio: !!f.has_audio,
+                    filesize: f.filesize || f.filesize_approx || null,
+                    mimeType: f.mime_type || `video/${f.ext || 'mp4'}`
+                };
+            })
+            .filter(Boolean);
 
         const thumbnail = info.thumbnail || (info.thumbnails && info.thumbnails[0]?.url) || '';
 

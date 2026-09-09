@@ -79,15 +79,32 @@ app.post('/api/video-info', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        const output = await runYtDlp([
-            url,
-            '--dump-json',
-            '--no-playlist',
-            '--no-warnings',
-            '--extractor-args', 'youtube:player_client=android;player_skip=configs',
-            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            ...(YT_COOKIES ? ['--cookies', COOKIES_PATH] : [])
-        ]);
+        try {
+            let output;
+            try {
+                output = await runYtDlp([
+                    url,
+                    '--dump-json',
+                    '--no-playlist',
+                    '--no-warnings',
+                    '--extractor-args', 'youtube:player_client=android;player_skip=configs',
+                    '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                    ...(YT_COOKIES && fs.existsSync(COOKIES_PATH) ? ['--cookies', COOKIES_PATH] : [])
+                ]);
+            } catch (cookieError) {
+                if (YT_COOKIES && fs.existsSync(COOKIES_PATH)) {
+                    output = await runYtDlp([
+                        url,
+                        '--dump-json',
+                        '--no-playlist',
+                        '--no-warnings',
+                        '--extractor-args', 'youtube:player_client=android;player_skip=configs',
+                        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+                    ]);
+                } else {
+                    throw cookieError;
+                }
+            }
 
         const lines = output.split('\n').filter(Boolean);
         const info = lines.length > 0 ? JSON.parse(lines[0]) : null;

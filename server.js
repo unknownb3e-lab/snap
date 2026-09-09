@@ -20,7 +20,6 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
 
 const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
 const YT_COOKIES = process.env.YT_COOKIES || '';
-const YT_COOKIES = process.env.YT_COOKIES || '';
 
 function runYtDlp(args) {
     return new Promise((resolve, reject) => {

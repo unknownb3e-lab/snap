@@ -97,7 +97,7 @@ app.post('/api/video-info', async (req, res) => {
                 }
             })
             .filter(Boolean)
-            .filter(f => (f.has_video || f.has_audio) && !f.manifest_url && !f.fragment_base_url)
+            .filter(f => f.has_video || f.has_audio)
             .map(f => ({
                 itag: f.format_id,
                 quality: f.quality_label || f.audio_quality || 'unknown',

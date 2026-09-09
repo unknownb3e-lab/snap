@@ -1,8 +1,8 @@
 const express = require('express');
 const cors = require('cors');
-const YtDlpWrap = require('yt-dlp-wrap');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const { v4: uuidv4 } = require('uuid');
 
 const app = express();
@@ -18,7 +18,44 @@ if (!fs.existsSync(DOWNLOADS_DIR)) {
     fs.mkdirSync(DOWNLOADS_DIR, { recursive: true });
 }
 
-const ytDlp = new YtDlpWrap(process.env.YTDLP_PATH || 'yt-dlp');
+const YTDLP = process.env.YTDLP_PATH || 'yt-dlp';
+
+function runYtDlp(args) {
+    return new Promise((resolve, reject) => {
+        const child = spawn(YTDLP, args);
+        let stdout = '';
+        let stderr = '';
+
+        child.stdout.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        child.stderr.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        child.on('close', (code) => {
+            if (code !== 0) {
+                const errorMsg = stderr || stdout || `yt-dlp exited with code ${code}`;
+                reject(new Error(errorMsg));
+            } else {
+                resolve(stdout);
+            }
+        });
+
+        child.on('error', reject);
+    });
+}
+
+function extractJsonFromOutput(output) {
+    const match = output.match(/\{[\s\S]*\}/);
+    if (!match) return null;
+    try {
+        return JSON.parse(match[0]);
+    } catch {
+        return null;
+    }
+}
 
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
@@ -35,9 +72,30 @@ app.post('/api/video-info', async (req, res) => {
             return res.status(400).json({ error: 'URL is required' });
         }
 
-        const info = await ytDlp.getInfo(url);
-        const formats = (info.formats || [])
-            .filter(f => (f.hasVideo || f.hasAudio) && !f.manifest_url)
+        const output = await runYtDlp([
+            url,
+            '--dump-json',
+            '--no-playlist',
+            '--no-warnings'
+        ]);
+
+        const lines = output.split('\n').filter(Boolean);
+        const info = lines.length > 0 ? JSON.parse(lines[0]) : null;
+
+        if (!info) {
+            throw new Error('Failed to parse video info');
+        }
+
+        const formats = (lines)
+            .map(line => {
+                try {
+                    return JSON.parse(line);
+                } catch {
+                    return null;
+                }
+            })
+            .filter(Boolean)
+            .filter(f => (f.has_video || f.has_audio) && !f.manifest_url && !f.fragment_base_url)
             .map(f => ({
                 itag: f.format_id,
                 quality: f.quality_label || f.audio_quality || 'unknown',
@@ -79,7 +137,7 @@ app.post('/api/download', async (req, res) => {
         let formatOption = '';
 
         if (type === 'audio') {
-            formatOption = `bestaudio/best`;
+            formatOption = 'bestaudio/best';
             outputPath = path.join(DOWNLOADS_DIR, `${filename}.${format === 'm4a' ? 'm4a' : 'mp3'}`);
         } else {
             formatOption = itag ? itag : 'bestvideo+bestaudio/best';
@@ -108,7 +166,7 @@ app.post('/api/download', async (req, res) => {
             args.push('mp4');
         }
 
-        await ytDlp.exec(args);
+        await runYtDlp(args);
 
         const actualFile = fs.existsSync(outputPath)
             ? outputPath
